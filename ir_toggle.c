@@ -1,9 +1,7 @@
 #include <furi.h>
-#include <gui/gui.h>
 #include <input/input.h>
-#include <infrared/infrared_worker.h>
-
-#define COUNT_OF(x) (sizeof(x) / sizeof((x)[0]))
+#include <infrared/infrared.h>
+#include <stdbool.h>
 
 typedef struct {
     bool power;
@@ -15,6 +13,8 @@ typedef struct {
     bool b;
     bool ok;
 } IrAppState;
+
+#define COUNT_OF(x) (sizeof(x)/sizeof((x)[0]))
 
 // -------------------- TWOJE KODY RAW --------------------
 
@@ -52,72 +52,42 @@ const uint32_t ok2_data[] = {955,811,906,862,1790,860,906,1743,908,860,1792,1744
 
 // -------------------- /TWOJE KODY RAW --------------------
 
-static void ir_send(const uint32_t* data, size_t size) {
-    InfraredWorker* ir = infrared_worker_alloc();
-    infrared_worker_tx(ir, data, size, 38000, 0.33f);
-    infrared_worker_free(ir);
-}
-
-#define SEND_TOGGLE(state, d1, d2) do { \
-    if(state) ir_send(d1, COUNT_OF(d1)); \
-    else      ir_send(d2, COUNT_OF(d2)); \
-    state = !state; \
-} while(0)
-
-static void draw_callback(Canvas* canvas, void* ctx) {
-    UNUSED(ctx);
-    canvas_clear(canvas);
-    canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 4, 14, "IR Toggle");
-    canvas_set_font(canvas, FontSecondary);
-    canvas_draw_str(canvas, 4, 28, "Up=U  Down=D  Left=L  Right=R");
-    canvas_draw_str(canvas, 4, 40, "OK(short)=OK  Back(short)=Power");
-    canvas_draw_str(canvas, 4, 52, "OK(long)=A    Back(long)=B");
-}
-
-static void input_callback(InputEvent* input, void* ctx) {
-    IrAppState* s = ctx;
-
-    if(input->type == InputTypePress) {
-        switch(input->key) {
-            case InputKeyUp:    SEND_TOGGLE(s->u,    u1_data,  u2_data); break;
-            case InputKeyDown:  SEND_TOGGLE(s->d,    d1_data,  d2_data); break;
-            case InputKeyLeft:  SEND_TOGGLE(s->l,    l1_data,  l2_data); break;
-            case InputKeyRight: SEND_TOGGLE(s->r,    r1_data,  r2_data); break;
-            case InputKeyOk:    SEND_TOGGLE(s->ok,   ok1_data, ok2_data); break;
-            case InputKeyBack:  SEND_TOGGLE(s->power,power1_data,power2_data); break;
-            default: break;
-        }
+static void send_toggle(bool* state, const uint32_t* d1, size_t size1,
+                        const uint32_t* d2, size_t size2) {
+    if(*state) {
+        infrared_send_raw(d1, size1, 38000, 0.33f);
+    } else {
+        infrared_send_raw(d2, size2, 38000, 0.33f);
     }
-
-    if(input->type == InputTypeLong) {
-        switch(input->key) {
-            case InputKeyOk:    SEND_TOGGLE(s->a, a1_data, a2_data); break;
-            case InputKeyBack:  SEND_TOGGLE(s->b, b1_data, b2_data); break;
-            default: break;
-        }
-    }
+    *state = !(*state);
 }
 
 int32_t ir_toggle_app(void* p) {
     UNUSED(p);
     IrAppState state = {0};
-
-    ViewPort* vp = view_port_alloc();
-    view_port_draw_callback_set(vp, draw_callback, &state);
-    view_port_input_callback_set(vp, input_callback, &state);
-
-    Gui* gui = furi_record_open(RECORD_GUI);
-    gui_add_view_port(gui, vp, GuiLayerFullscreen);
+    InputEvent input;
 
     while(1) {
-        furi_delay_ms(50);
-        // nic – czekamy na input
+        if(furi_hal_input_get_event(&input, 100)) {
+            if(input.type == InputTypePress) {
+                switch(input.key) {
+                    case InputKeyUp:    send_toggle(&state.u, u1_data, COUNT_OF(u1_data), u2_data, COUNT_OF(u2_data)); break;
+                    case InputKeyDown:  send_toggle(&state.d, d1_data, COUNT_OF(d1_data), d2_data, COUNT_OF(d2_data)); break;
+                    case InputKeyLeft:  send_toggle(&state.l, l1_data, COUNT_OF(l1_data), l2_data, COUNT_OF(l2_data)); break;
+                    case InputKeyRight: send_toggle(&state.r, r1_data, COUNT_OF(r1_data), r2_data, COUNT_OF(r2_data)); break;
+                    case InputKeyOk:    send_toggle(&state.ok, ok1_data, COUNT_OF(ok1_data), ok2_data, COUNT_OF(ok2_data)); break;
+                    case InputKeyBack:  send_toggle(&state.power, power1_data, COUNT_OF(power1_data), power2_data, COUNT_OF(power2_data)); break;
+                    default: break;
+                }
+            }
+            if(input.type == InputTypeLong) {
+                switch(input.key) {
+                    case InputKeyOk:    send_toggle(&state.a, a1_data, COUNT_OF(a1_data), a2_data, COUNT_OF(a2_data)); break;
+                    case InputKeyBack:  send_toggle(&state.b, b1_data, COUNT_OF(b1_data), b2_data, COUNT_OF(b2_data)); break;
+                    default: break;
+                }
+            }
+        }
     }
-
-    // poniższy kod nigdy nie zostanie wykonany przy normalnym wyjściu
-    gui_remove_view_port(gui, vp);
-    view_port_free(vp);
-    furi_record_close(RECORD_GUI);
     return 0;
 }
