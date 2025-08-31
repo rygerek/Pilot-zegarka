@@ -1,0 +1,8 @@
+App(
+    appid="ir_toggle",
+    name="IR Toggle Remote",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="ir_toggle_app",
+    requires=["irda"],
+    stack_size=2 * 1024,
+)
