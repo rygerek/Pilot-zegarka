@@ -1,0 +1,14 @@
+name: Build FAP
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: flipperdevices/flipperzero-ufbt-action@v0.3
+        with:
+          target: fap
